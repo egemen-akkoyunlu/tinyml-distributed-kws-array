@@ -33,10 +33,15 @@ def train(cfg: DictConfig):
     # Preload dataset, set to False for faster tests
     preload = cfg.dataset.preload
 
+    # Extract hard negative classes if specified
+    hard_negatives = cfg.dataset.get('hard_negatives', None)
+    if hard_negatives:
+        log.info(f"Targeting Full Hard-Negative Classes in 'nothing': {hard_negatives}")
+
     # Create datasets for each split SpeechCommandsDataset
-    train_dataset = instantiate(cfg.dataset.train, preload=preload, allowed_classes=ALLOWED_CLASSES)
-    val_dataset = instantiate(cfg.dataset.val, preload=preload, allowed_classes=ALLOWED_CLASSES)
-    test_dataset = instantiate(cfg.dataset.test, preload=preload, allowed_classes=ALLOWED_CLASSES)
+    train_dataset = instantiate(cfg.dataset.train, preload=preload, allowed_classes=ALLOWED_CLASSES, hard_negatives=hard_negatives)
+    val_dataset = instantiate(cfg.dataset.val, preload=preload, allowed_classes=ALLOWED_CLASSES, hard_negatives=hard_negatives)
+    test_dataset = instantiate(cfg.dataset.test, preload=preload, allowed_classes=ALLOWED_CLASSES, hard_negatives=hard_negatives)
 
     log.info(f"Training samples: {len(train_dataset)}")
     log.info(f"Validation samples: {len(val_dataset)}")
@@ -263,7 +268,8 @@ def train(cfg: DictConfig):
         sample_waveform = sample_waveform.unsqueeze(0).to(device)
         from torchaudio.transforms import MelSpectrogram, AmplitudeToDB
         mel_transform = MelSpectrogram(
-            sample_rate=sr, n_fft=cfg.model.n_fft, hop_length=cfg.model.hop_length, n_mels=cfg.model.n_mel_bins
+            sample_rate=sr, n_fft=cfg.model.n_fft, hop_length=cfg.model.hop_length, n_mels=cfg.model.n_mel_bins,
+            mel_scale="htk", norm=None, center=False
         ).to(device)
         db_transform = AmplitudeToDB().to(device)
         spectrogram = db_transform(mel_transform(sample_waveform))
@@ -309,7 +315,8 @@ def train(cfg: DictConfig):
         # Transform waveform to spectrogram like your preprocessing pipeline
         from torchaudio.transforms import MelSpectrogram, AmplitudeToDB
         mel_transform = MelSpectrogram(
-            sample_rate=sr, n_fft=cfg.model.n_fft, hop_length=cfg.model.hop_length, n_mels=cfg.model.n_mel_bins
+            sample_rate=sr, n_fft=cfg.model.n_fft, hop_length=cfg.model.hop_length, n_mels=cfg.model.n_mel_bins,
+            mel_scale="htk", norm=None, center=False
         ).to(device)
         db_transform = AmplitudeToDB().to(device)
         spectrogram = db_transform(mel_transform(sample_waveform))  # shape: [1, n_mels, time]

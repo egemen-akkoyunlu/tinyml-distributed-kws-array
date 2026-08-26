@@ -26,7 +26,10 @@ class Improved_Phi_GRU_ATT_Streaming(nn.Module):
                 sample_rate=16000,
                 n_fft=n_fft,
                 hop_length=hop_length,
-                n_mels=n_mel_bins
+                n_mels=n_mel_bins,
+                mel_scale="htk",
+                norm=None,
+                center=False
             )
             self.amplitude_to_db = torchaudio.transforms.AmplitudeToDB()
 
@@ -52,14 +55,14 @@ class Improved_Phi_GRU_ATT_Streaming(nn.Module):
             x = self.mel_spec(x)
             x = self.amplitude_to_db(x)
 
-        # Normalize input
-        if x.dim() == 3:
-            x = x.unsqueeze(1)  # Add channel dimension if missing
+            # Normalize input (only during training / PyTorch FP32 evaluation)
+            if x.dim() == 3:
+                x = x.unsqueeze(1)  # Add channel dimension if missing
 
-        mean = x.mean(dim=(2, 3), keepdim=True)
-        std = x.std(dim=(2, 3), keepdim=True) + 1e-5
-        x = (x - mean) / std
-        x = x.squeeze(1)  # (B, Mels, Time)
+            mean = x.mean(dim=(2, 3), keepdim=True)
+            std = x.std(dim=(2, 3), keepdim=True) + 1e-5
+            x = (x - mean) / std
+            x = x.squeeze(1)  # (B, Mels, Time)
 
         # Process through model
         x = self.phi(x)

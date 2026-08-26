@@ -1,0 +1,11 @@
+{
+  "useFolders": false,
+  "baseUrl": "",
+  "codeHeaders": true,
+  "copyImages": true,
+  "filesFilter": [],
+  "imagesUrl": "/images",
+  "indexInFolders": false,
+  "linkLowercases": true,
+  "mainPageInRoot": true
+}

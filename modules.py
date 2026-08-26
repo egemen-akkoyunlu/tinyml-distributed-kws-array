@@ -373,7 +373,7 @@ class SEBlock(torch.nn.Module):
         """
 
         inp = x
-        x = F.adaptive_avg_pool1d(x, 1)
+        x = x.mean(dim =-1, keepdim=True)
         x = self.se_conv(x)
         x = self.activation(x)
         x = self.se_conv2(x)
@@ -1358,7 +1358,6 @@ class MatchboxNetSkip(nn.Module):
                 has_se=use_se,
                 expansion=expansion_factor
             ),
-            nn.BatchNorm1d(base_filters),
             nn.ReLU(),
             nn.Dropout(dropout_rate)
         )
@@ -1391,7 +1390,6 @@ class MatchboxNetSkip(nn.Module):
                         has_se=use_se,
                         expansion=expansion_factor
                     ),
-                    nn.BatchNorm1d(block_filters),
                     nn.ReLU(),
                     nn.Dropout(dropout_rate)
                 )
@@ -1419,7 +1417,6 @@ class MatchboxNetSkip(nn.Module):
                 has_se=use_se,
                 expansion=expansion_factor
             ),
-            nn.BatchNorm1d(base_filters),
             nn.ReLU(),
             nn.Dropout(dropout_rate)
         )
@@ -1438,7 +1435,6 @@ class MatchboxNetSkip(nn.Module):
                 has_se=use_se,
                 expansion=expansion_factor
             ),
-            nn.BatchNorm1d(base_filters),
             nn.ReLU(),
             nn.Dropout(dropout_rate)
         )

@@ -36,14 +36,15 @@ def download_and_extract_speech_commands_dataset():
 
 class SpeechCommandsDataset(Dataset):
     def __init__(self, root_dir, transform=None, allowed_classes=["up", "down", "left", "right", "nothing", "other"],
-                 subset="training", augment=False, preload=False):
+                 hard_negatives=None, subset="training", augment=False, preload=False):
         """
-        Speech Commands Dataset with support for 'nothing' and 'other' classes
+        Speech Commands Dataset with support for 'nothing', 'other', and full 'hard_negatives' classes
 
         Args:
             root_dir (string): Directory with the Speech Commands dataset
             transform (callable, optional): Optional transform to be applied on a sample
             allowed_classes (list): List of classes to include, should contain "nothing" and "other" for those classes
+            hard_negatives (list): Non-target classes whose 100% full dataset should be added into 'nothing'
             subset (string): Which subset to use ('training', 'validation', 'testing')
             augment (bool): Whether to apply augmentation to the data
             preload (bool): If True, preload all audio files into memory
@@ -53,6 +54,7 @@ class SpeechCommandsDataset(Dataset):
         self.subset = subset
         self.augment = augment and subset == "training"  # Only augment training data
         self.preload = preload
+        self.hard_negatives = list(hard_negatives) if hard_negatives else []
 
         # Make a copy of allowed_classes to avoid modifying the input
         self.allowed_classes = list(allowed_classes)
@@ -119,42 +121,96 @@ class SpeechCommandsDataset(Dataset):
             self.preloaded_data = {path: self.load_audio(path) for path in self.file_list}
 
     def add_nothing_class(self):
-        """Add background noise samples as the 'nothing' class."""
+        """Add background noise AND non-keyword human speech samples as the 'nothing' class."""
         background_dir = os.path.join(self.root_dir, "_background_noise_")
 
         # Calculate target number of "nothing" samples
-        # Aim to make "nothing" class roughly the same size as the standard classes
         standard_classes = [cls for cls in self.allowed_classes if cls not in ["nothing", "other"]]
         target_count = 0
         for class_name in standard_classes:
             class_count = sum(1 for label in self.labels if label == self.class_to_idx[class_name])
             target_count = max(target_count, class_count)
 
+        # 1. Add background noise segments
         if os.path.isdir(background_dir):
             bg_files = [f for f in os.listdir(background_dir) if f.endswith('.wav')]
 
-            if not bg_files:
-                print(f"Warning: No background noise files found in {background_dir}")
-                return
+            if bg_files:
+                segments_per_file = max(5, (target_count // (len(bg_files) * 2)) + 1)
 
-            # Determine how many segments to create per file
-            segments_per_file = max(10, (target_count // len(bg_files)) + 1)
+                for file in bg_files:
+                    bg_path = os.path.join(background_dir, file)
+                    num_segments = segments_per_file if self.subset == "training" else max(2, segments_per_file // 2)
 
-            # Create segments from background noise files
-            for file in bg_files:
-                bg_path = os.path.join(background_dir, file)
+                    for i in range(num_segments):
+                        self.file_list.append(bg_path + f"#{i}")
+                        self.labels.append(self.class_to_idx["nothing"])
 
-                # For background noise, we'll create multiple segments from each file
-                if self.subset == "training":
-                    num_segments = segments_per_file
+        # 2. Add non-keyword human speech words (e.g. cat, dog, up, down, yes, no, etc.)
+        test_files = set()
+        validation_files = set()
+        test_list_path = os.path.join(self.root_dir, "testing_list.txt")
+        if os.path.exists(test_list_path):
+            with open(test_list_path, 'r') as f:
+                for line in f:
+                    test_files.add(line.strip())
+        val_list_path = os.path.join(self.root_dir, "validation_list.txt")
+        if os.path.exists(val_list_path):
+            with open(val_list_path, 'r') as f:
+                for line in f:
+                    validation_files.add(line.strip())
+
+        other_word_dirs = [d for d in os.listdir(self.root_dir)
+                           if os.path.isdir(os.path.join(self.root_dir, d))
+                           and d not in standard_classes
+                           and not d.startswith('_')]
+
+        if other_word_dirs:
+            # Sample evenly from non-target word directories, but include ALL samples for hard_negatives
+            for word_dir in sorted(other_word_dirs):
+                full_dir = os.path.join(self.root_dir, word_dir)
+                files = [f for f in os.listdir(full_dir) if f.endswith('.wav')]
+                
+                is_hard_negative = word_dir in self.hard_negatives
+                if is_hard_negative:
+                    # 1:1 Parity Rule: Match the exact sample count of the confusable target class
+                    if "tree" in self.class_to_idx and word_dir == "three":
+                        ref_count = sum(1 for label in self.labels if label == self.class_to_idx["tree"])
+                    elif "three" in self.class_to_idx and word_dir == "tree":
+                        ref_count = sum(1 for label in self.labels if label == self.class_to_idx["three"])
+                    else:
+                        ref_count = max(50, len(self.labels) // max(1, len(standard_classes)))
+                    samples_per_dir = max(50, ref_count)
                 else:
-                    num_segments = segments_per_file // 2  # Fewer for validation/testing
+                    samples_per_dir = 50 if self.subset == "training" else 15
+                
+                added_for_dir = 0
+                for file in files:
+                    if added_for_dir >= samples_per_dir:
+                        break
+                    relative_path = os.path.join(word_dir, file)
+                    full_path = os.path.join(self.root_dir, relative_path)
 
-                for i in range(num_segments):
-                    self.file_list.append(bg_path + f"#{i}")  # Use # to mark it as a segment
-                    self.labels.append(self.class_to_idx["nothing"])
+                    in_test = relative_path in test_files
+                    in_val = relative_path in validation_files
 
-        print(f"Added {sum(1 for label in self.labels if label == self.class_to_idx['nothing'])} 'nothing' samples for {self.subset} set")
+                    should_include = False
+                    if self.subset == "testing" and in_test:
+                        should_include = True
+                    elif self.subset == "validation" and in_val:
+                        should_include = True
+                    elif self.subset == "training" and not in_test and not in_val:
+                        should_include = True
+
+                    if should_include:
+                        self.file_list.append(full_path)
+                        self.labels.append(self.class_to_idx["nothing"])
+                        added_for_dir += 1
+                
+                if is_hard_negative:
+                    print(f"[{self.subset}] 1:1 Hard-Negative Parity Active: Injected {added_for_dir} '{word_dir}' audio files into 'nothing' class (Matched target class count: {samples_per_dir}).")
+
+        print(f"Added {sum(1 for label in self.labels if label == self.class_to_idx['nothing'])} 'nothing' samples (noise + non-keyword speech) for {self.subset} set")
 
     def add_other_class(self):
         """Add samples from non-target words as the 'other' class."""
@@ -298,17 +354,17 @@ class SpeechCommandsDataset(Dataset):
 
             # Select a random 1-second segment
             total_samples = waveform.shape[1]
-            if total_samples <= 16000:
+            if total_samples <= 16096:
                 start_idx = 0
             else:
                 # Use segment_id to deterministically select different segments
-                max_start = total_samples - 16000
+                max_start = total_samples - 16096
                 start_idx = (segment_id * 1234) % max_start  # Pseudo-random but deterministic
 
-            segment = waveform[:, start_idx:start_idx + 16000]
+            segment = waveform[:, start_idx:start_idx + 16096]
 
-            # Ensure the segment is exactly 16000 samples
-            segment = self.ensure_length(segment)
+            # Ensure the segment is exactly 16096 samples
+            segment = self.ensure_length(segment, target_length=16096)
 
             # Normalize
             if segment.abs().max() > 0:
@@ -323,12 +379,12 @@ class SpeechCommandsDataset(Dataset):
         if waveform.shape[0] > 1:
             waveform = waveform.mean(dim=0, keepdim=True)  # Convert stereo to mono
 
-        # Ensure waveform is exactly 16000 samples
+        # Ensure waveform is exactly 16096 samples
         num_samples = waveform.shape[1]
-        if num_samples < 16000:
-            waveform = F.pad(waveform, (0, 16000 - num_samples))  # Pad with zeros
-        elif num_samples > 16000:
-            waveform = waveform[:, :16000]  # Trim to 16000 samples
+        if num_samples < 16096:
+            waveform = F.pad(waveform, (0, 16096 - num_samples))  # Pad with zeros
+        elif num_samples > 16096:
+            waveform = waveform[:, :16096]  # Trim to 16096 samples
 
         # Normalize audio (avoid division by zero)
         if waveform.abs().max() > 0:
@@ -348,12 +404,12 @@ class SpeechCommandsDataset(Dataset):
             if random.random() < 0.2:  # 20% chance to apply each augmentation
                 waveform = aug(waveform)
 
-        # Ensure the waveform is exactly 16000 samples after augmentation
-        waveform = self.ensure_length(waveform)
+        # Ensure the waveform is exactly 16096 samples after augmentation
+        waveform = self.ensure_length(waveform, target_length=16096)
 
         return waveform
 
-    def ensure_length(self, waveform, target_length=16000):
+    def ensure_length(self, waveform, target_length=16096):
         num_samples = waveform.shape[1]
 
         # Pad if shorter than the target length
@@ -378,7 +434,7 @@ class SpeechCommandsDataset(Dataset):
         return transform(waveform)
 
     def time_shift(self, waveform, shift_limit=0.2):
-        shift = int(shift_limit * 16000 * (random.random() - 0.5))
+        shift = int(shift_limit * 16096 * (random.random() - 0.5))
         return torch.roll(waveform, shifts=shift, dims=1)
 
     def speed_perturb(self, waveform, rate_min=0.9, rate_max=1.1):

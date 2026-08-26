@@ -1,0 +1,93 @@
+experiment_name: export_nfft_128_all_classes # Defines the base name for the output folder where weights and logs are saved.
+
+hydra:
+  run:
+    dir: ./logs/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S} # Automatically creates a unique timestamped folder for every training run so you never overwrite previous models.
+  job:
+    name: ${experiment_name} # Tags the internal Hydra job with the experiment name.
+
+training:
+  batch_size: 128 # Number of audio samples processed in parallel during one forward/backward pass. Limits VRAM usage.
+  epochs: 100 # Maximum number of times the network will see the entire dataset.
+  patience: 10 # Early stopping mechanism: if the validation loss doesn't improve for 10 epochs, training halts to prevent overfitting.
+  min_delta: 0.001 # The minimum change in loss required to reset the 'patience' counter. Prevents stopping due to micro-fluctuations.
+
+model:
+  _target_: models.streaming.Improved_Phi_GRU_ATT_Streaming # The exact Python class Hydra will instantiate. This uses the GRU streaming architecture.
+  # _target_: models.separate_unified_lstm.Phi_LSTM_ATT # Commented out. This would have used a standard LSTM instead.
+  num_classes: 35 # THE NUMBER OF OUTPUT NEURONS. (See my critical note below regarding this value).
+  n_mel_bins: 40 # DSP Frontend: Number of Mel-frequency cepstral coefficients extracted per frame. This dictates the exact input vector size for the first neural network layer.
+  hidden_dim: 32 # The internal state size of the GRU. When running on hardware, you will need to allocate exactly 32 floating-point variables in memory to persist this state between audio frames.
+  n_fft: 256 # DSP Frontend: The FFT window size. On your hardware, your raw audio DMA buffer needs to collect at least 256 samples before triggering the DSP calculation.
+  hop_length: 160 # DSP Frontend: The stride of the streaming algorithm. You process a new frame every 160 samples. At 16kHz, this equals 10ms of latency per inference tick.
+  export_mode: false # Set to false for training. When set to true, it changes the PyTorch forward pass to disable gradients and prepare the graph for ONNX/TFLite extraction.
+
+  matchbox: # Configuration for the MatchboxNet (1D Depthwise Separable CNN) feature extractor.
+    input_channels: 40 # Must perfectly match n_mel_bins, as the CNN ingests the MFCCs.
+    base_filters: 32 # Number of convolution filters in the initial layers.
+    block_filters: 16 # Number of convolution filters in the deeper blocks. Keeping this low (16) strictly bounds the MAC (Multiply-Accumulate) operations for real-time edge processing.
+    dropout_rate: 0.5 # Randomly zeroes 25% of activations during training to force the network to learn robust, redundant features.
+    use_se: true # Squeeze-and-Excitation. Adds a lightweight attention mechanism to weight the importance of different frequency channels.
+    expansion_factor: 0.8 # Controls the bottleneck width inside the CNN blocks, reducing the parameter count.
+
+    num_blocks: 2 # The number of main repeating CNN structures.
+    sub_blocks_per_block: 2 # The depth inside each main block.
+
+    #kernel_sizes: [7, 5, 3, 3, 3, 5, 3, 1] # The time-receptive field for each layer. 1D convolutions looking across time.
+    #dilations: [1, 2, 4, 8, 4, 2, 1, 1] # Spacing between kernel elements. High dilation allows the network to "see" a wider time window without increasing the actual kernel size (saving computation).
+     kernel_sizes: [3, 3, 3, 3, 3, 3, 3, 3] # Commented alternative.
+     dilations: [1, 2, 4, 8, 1, 2, 4, 8] # Commented alternative.
+
+    skip_connections: # Residual connections (adding the input of a block to its output) to prevent vanishing gradients during training.
+      enable_block_skips: true
+      enable_sub_block_skips: true
+      enable_final_skip: true
+
+  # num_layers: 1 # Commented out. Likely controlled the depth of the GRU.
+
+optimizer:
+  _target_: torch.optim.AdamW # An optimization algorithm that updates network weights. AdamW decouples weight decay for better generalization.
+  lr: 1e-3 # Learning rate. The step size taken to minimize the loss curve.
+  weight_decay: 1e-5 # L2 regularization penalty. Prevents weights from growing too large, helping the model ignore background noise.
+
+ #scheduler: # These commented blocks are alternative learning rate decay strategies.
+  # _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  # mode: min
+   #factor: 0.5
+   #patience: 5
+   #verbose: true
+
+ #scheduler:
+  # _target_: torch.optim.lr_scheduler.CosineAnnealingWarmRestarts
+   #T_0: 10           
+   #T_mult: 2         
+   #eta_min: 1e-6     
+  #verbose: true
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR # Slowly decreases the learning rate following a cosine curve over the training process to gently settle into the local minimum.
+  T_max: 100 # The curve spans the total number of epochs.
+  eta_min: 5e-6 # The final, smallest learning rate it will reach at epoch 100.
+  verbose: true # Prints the learning rate changes to the console.
+
+dataset:
+  defaults: # A Hydra-specific artifact for nesting configs.
+  preload: true # Loads all audio files into RAM before training starts. Massive speedup, but requires enough system memory.
+  allowed_classes: ["go", "stop", "left", "right", "nothing"] # The active filter for the dataset. Only loads files belonging to these 5 words.
+  # The large commented block contains the full 35-word Google Speech Commands vocabulary.
+  
+  train:
+    _target_: datasets.SpeechCommandsDataset # The custom Python class that handles loading the audio from disk.
+    root_dir: "speech_commands_dataset" # The folder path where the .wav files are stored.
+    subset: "training" # Tells the class to only pull from the training split list.
+    augment: true # Enables DSP data augmentation (e.g., adding background noise, random time shifts) to make the model robust to real-world environments.
+  val:
+    _target_: datasets.SpeechCommandsDataset
+    root_dir: "speech_commands_dataset"
+    subset: "validation" # Evaluates the model during training.
+    augment: false # Augmentation must be off during validation to get an accurate performance metric.
+  test:
+    _target_: datasets.SpeechCommandsDataset
+    root_dir: "speech_commands_dataset"
+    subset: "testing" # The final hold-out set used strictly after training is completely finished.
+    augment: false
