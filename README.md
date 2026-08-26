@@ -124,13 +124,18 @@ streamable-kws/
 ├── models/                               # PyTorch Streaming Neural Network architectures
 │   └── streaming.py                      # Improved_Phi_GRU_ATT_Streaming MatchboxNet
 ├── zephyr_kws/                           # Bare-metal C++ firmware for Zephyr RTOS
-│   ├── src/                              # I2S DMA, DSP Mel extraction, ESP-DL inference, BLE
-│   │   ├── inference.cpp                 # On-device model wrapper & Softmax
-│   │   ├── dsp_processor.cpp             # Hendriks MMSE noise estimator & Mel filterbank
-│   │   ├── ble_manager.cpp               # 10-byte binary GATT packet streamer
-│   │   └── kws_config.hpp                # Device ID & threshold configuration
-│   ├── CMakeLists.txt                    # Zephyr build system configuration
-│   └── prj.conf                          # Hardware FPU, PSRAM, DMA, and RTOS flags
+│   ├── CMakeLists.txt                    # Zephyr build configuration & ESP-DL links
+│   ├── prj.conf                          # Hardware FPU, PSRAM, DMA, and RTOS flags
+│   ├── app.overlay                       # Device Tree overlay for I2S PDM microphone
+│   └── src/                              # Embedded C++ drivers & inference engine
+│       ├── main.cpp                      # RTOS thread entry & audio streaming loop
+│       ├── inference.cpp / .hpp          # ESP-DL neural inference & hardware FPU Softmax
+│       ├── audio_i2s.cpp / .hpp          # Zero-copy I2S DMA microphone driver
+│       ├── audio_processing.cpp / .hpp   # Mel filterbank & 100-frame sliding window
+│       ├── ble_server.c / .h             # 10-byte binary GATT telemetry streamer
+│       ├── kws_config.hpp                # Device ID (1/2/3) & threshold configuration
+│       ├── microsd.c / .h                # Optional MicroSD telemetry logger
+│       └── compat/                       # ESP-IDF to Zephyr RTOS compatibility layer
 ├── datasets.py                           # Google Speech Commands v2 streaming loader
 ├── train.py                              # PyTorch training script with Hydra & Cosine Annealing
 ├── optimize_smart_overlap_allocation.py  # Graph-Theoretic MoE Optimizer (Tri-factor V(k) & W_ij)
@@ -187,6 +192,11 @@ python3 quantize_to_espdl.py --config config/kws_smart_overlap_dev3_25classes.ya
 ---
 
 ### 4. Flashing Physical Microcontrollers (Device IDs 1, 2, 3)
+
+> **Note on ESP-DL:** The firmware utilizes Espressif's accelerated `esp-dl` library. If building firmware, ensure `esp-dl` is present in the root workspace:
+> ```bash
+> git clone https://github.com/espressif/esp-dl.git
+> ```
 
 For each Seeed Studio XIAO ESP32-S3 Sense board:
 
