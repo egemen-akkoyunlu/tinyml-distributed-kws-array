@@ -35,3 +35,6 @@ esc50_7/
 clean_7/
 gaus_noise_7/
 *.csv
+!docs/
+!docs/assets/
+!docs/assets/*.png
