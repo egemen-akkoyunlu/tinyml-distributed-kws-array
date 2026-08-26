@@ -26,7 +26,7 @@ This system extends [`sciapponi/streamable-kws`](https://github.com/sciapponi/st
   - [5. Live Multi-Device Real-Time Gateway Fusion](#5-live-multi-device-real-time-gateway-fusion)
 - [Topologies & MoE Strategies Explained](#-topologies--moe-strategies-explained)
 - [Empirical Benchmark Results](#-empirical-benchmark-results)
-- [Confusion Matrix Heatmaps](#-confusion-matrix-heatmaps)
+- [Confusion Matrix Heatmaps (Gaussian Noise)](#-confusion-matrix-heatmaps-under-stationary-gaussian-hvac-noise)
 - [Safety & Squelch Stack](#-safety--squelch-stack)
 - [License](#-license)
 
@@ -267,12 +267,12 @@ The gateway will automatically discover all 3 nodes, establish encrypted GATT te
 
 ---
 
-## 🟪 Confusion Matrix Heatmaps
+## 🟪 Confusion Matrix Heatmaps (Under Stationary Gaussian HVAC Noise)
 
-Universal Overlap MoE ($25+25+25$) eliminates pairwise false alarms between acoustically confusable pairs (`TREE` vs `THREE`), driving false alarm rates to $0.0\%$:
+Evaluated under **Stationary Gaussian HVAC Room Noise (Calibrated SNR)** across 1,500 unseen test utterances. The 3-Device Universal Overlap MoE ($25+25+25$) achieves **88.1% overall accuracy** and completely eliminates pairwise cross-talk between confusable phonetic twins (`TREE` vs `THREE`), driving false alarm rates down to **0.0%**:
 
 <p align="center">
-  <img src="docs/assets/04_universal_overlap_confusion_matrix.png" alt="Universal Overlap Confusion Matrix" width="850"/>
+  <img src="docs/assets/04_universal_overlap_confusion_matrix.png" alt="Universal Overlap Confusion Matrix under Gaussian HVAC Noise" width="850"/>
 </p>
 
 ---
