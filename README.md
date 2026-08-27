@@ -7,9 +7,13 @@
 [![Quantization](https://img.shields.io/badge/Quantization-Hybrid_INT8%2FFP32-green.svg)](https://github.com/espressif/esp-dl)
 [![Accuracy](https://img.shields.io/badge/Accuracy-93.9%25%20(Clean)%20%7C%2088.1%25%20(Noise)-brightgreen.svg)]()
 
-An end-to-end, fault-tolerant **Distributed TinyML Acoustic Sensor Network** for streaming Keyword Spotting (KWS) across resource-constrained edge microcontrollers (**Seeed Studio XIAO ESP32-S3 Sense**). 
+An end-to-end, fault-tolerant **Distributed TinyML Acoustic Sensor Network** for streaming Keyword Spotting (KWS) across resource-constrained edge microcontrollers (**Seeed Studio XIAO ESP32-S3 Sense**).
 
-This system extends [`sciapponi/streamable-kws`](https://github.com/sciapponi/streamable-kws) and eliminates the classical **Acoustic Correlation Trap** (where homogeneous arrays make identical errors on phonetically confusable words like "TREE" vs "THREE") through **Graph-Theoretic Vocabulary Partitioning**, **Universal Overlap Clustering**, **Spatial 4-Bit SNR-Weighted Soft Late Fusion**, and **Bare-Metal Zephyr RTOS C++ Drivers**.
+> [!NOTE]
+> **Special Thanks & Upstream Foundation:**  
+> This project is proudly built upon the foundational single-device streamable Keyword Spotting framework from [`sciapponi/streamable-kws`](https://github.com/sciapponi/streamable-kws). We express our sincere gratitude to **Simone Ciapponi** for open-sourcing the base streaming MatchboxNet training architecture, upon which we engineered our distributed graph-theoretic MoE partitioning, Zephyr RTOS C++ drivers, and real-time BLE gateway fusion stack.
+
+This system eliminates the classical **Acoustic Correlation Trap** (where homogeneous arrays make identical errors on phonetically confusable words like "TREE" vs "THREE") through **Graph-Theoretic Vocabulary Partitioning**, **Universal Overlap Clustering**, **Spatial 4-Bit SNR-Weighted Soft Late Fusion**, and **Bare-Metal Zephyr RTOS C++ Drivers**.
 
 ---
 
