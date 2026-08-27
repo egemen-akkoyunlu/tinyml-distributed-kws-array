@@ -6,6 +6,7 @@
 [![Hardware](https://img.shields.io/badge/Hardware-Seeed_XIAO_ESP32--S3_Sense-orange.svg)](https://www.seeedstudio.com/XIAO-ESP32S3-Sense-p-5639.html)
 [![Quantization](https://img.shields.io/badge/Quantization-Hybrid_INT8%2FFP32-green.svg)](https://github.com/espressif/esp-dl)
 [![Power](https://img.shields.io/badge/Power-64.8_mA_%7C_240_mW-yellow.svg)]()
+[![Latency](https://img.shields.io/badge/Latency-46.3_ms_(Inf)_%7C_1.4_ms_(DSP)-blue.svg)]()
 [![Accuracy](https://img.shields.io/badge/Accuracy-93.9%25%20(Clean)%20%7C%2088.1%25%20(Noise)-brightgreen.svg)]()
 
 An end-to-end, fault-tolerant **Distributed TinyML Acoustic Sensor Network** for streaming Keyword Spotting (KWS) across resource-constrained edge microcontrollers (**Seeed Studio XIAO ESP32-S3 Sense**).
@@ -44,7 +45,7 @@ This system eliminates the classical **Acoustic Correlation Trap** (where homoge
 ### Step 1: Clone the Repository & Enter Workspace
 
 ```bash
-git clone https://github.com/eakkoyunlu/tinyml-distributed-kws-array.git
+git clone https://github.com/egemen-akkoyunlu/tinyml-distributed-kws-array.git
 cd tinyml-distributed-kws-array
 ```
 
@@ -62,6 +63,10 @@ pip install -r requirements.txt
 - **Vector SIMD Acceleration:** Offloads 95% of neural network MAC operations (1D depthwise-separable dilated convolutions in MatchboxNet) to the Xtensa LX7 dual-core 128-bit Vector SIMD instructions (`esp-dl` kernel `base::mat_vec_dotprod`).
 - **Fixed-Point LUTs + Hardware FPU Softmax:** Fast fixed-point Lookup Tables (LUTs) compute Tanh and Sigmoid activations, while output layer Softmax probabilities are computed losslessly via the hardware single-precision Floating Point Unit (`CONFIG_FPU=y`).
 - **SRAM Budgeting & Automatic PSRAM Fallback:** Compresses the model footprint from **133.6 KB (FP32) down to 100.7 KB (INT8)** (1.33x compression) with **negligible accuracy degradation (<0.2%)**. Fits cleanly within the **512 KB internal SRAM** (allocating a strict $<128\text{ KB}$ runtime buffer for intermediate activations and 32 KB Mel spectrogram sliding buffers), with our custom `esp_heap_caps.cpp` fallback allocator auto-overflowing to **8 MB Octal PSRAM** if needed.
+- **Empirical On-Chip Latency Profiling:** Microcontroller UART hardware benchmarks on the ESP32-S3 confirm real-time execution per streaming window:
+  - *Audio Feature Extraction (Mel Filterbank + FFT):* **$1.41\text{ ms}$**
+  - *INT8 SIMD Neural Inference (MatchboxNet):* **$46.28\text{ ms}$**
+  - *Total On-Device Turnaround:* **$\approx 47.7\text{ ms}$** (guaranteeing continuous real-time streaming with zero I2S DMA buffer overruns).
 
 <p align="center">
   <img src="docs/assets/01_quantization_comparison.png" alt="INT8 Quantization Comparison" width="650"/>
@@ -432,7 +437,7 @@ Evaluated across the official Google Speech Commands v2 test set under **Station
 **Egemen Acar Akkoyunlu**  
 - 🔬 Research Intern, **Fondazione Bruno Kessler (FBK)**, Trento, Italy  
 - 🎓 Electrical and Electronics Engineering, **Boğaziçi University**, Istanbul, Turkey  
-- 🌐 [GitHub: @eakkoyunlu](https://github.com/eakkoyunlu)
+- 🌐 [GitHub: @egemen-akkoyunlu](https://github.com/egemen-akkoyunlu)
 
 ---
 
