@@ -16,7 +16,7 @@ Key Features:
      Fuses predictions instantly upon notification and evaluates consensus keywords.
 
 Usage:
-  /home/acar/kws_env/bin/python3 multi_device_fusion.py
+  python3 multi_device_fusion.py
 ===============================================================================
 """
 

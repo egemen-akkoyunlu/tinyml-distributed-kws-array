@@ -36,7 +36,7 @@ try:
 
 except ImportError:
     print("Error: esp-ppq is not installed or accessible in this Python environment.")
-    print("Please run this script inside kws_env: /home/acar/kws_env/bin/python3 quantize_to_espdl.py")
+    print("Please install esp-ppq and requirements: pip install -r requirements.txt")
     exit(1)
 
 
