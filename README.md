@@ -3,11 +3,11 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Base Repo](https://img.shields.io/badge/Base_Repo-sciapponi%2Fstreamable--kws-blue.svg)](https://github.com/sciapponi/streamable-kws)
 [![Zephyr RTOS](https://img.shields.io/badge/RTOS-Zephyr_3.7+-purple.svg)](https://zephyrproject.org/)
-[![Hardware](https://img.shields.io/badge/Hardware-ESP32--S3%20%7C%20EFR32MG24-orange.svg)](https://www.seeedstudio.com/XIAO-ESP32S3-Sense-p-5639.html)
+[![Hardware](https://img.shields.io/badge/Hardware-Seeed_XIAO_ESP32--S3_Sense-orange.svg)](https://www.seeedstudio.com/XIAO-ESP32S3-Sense-p-5639.html)
 [![Quantization](https://img.shields.io/badge/Quantization-Hybrid_INT8%2FFP32-green.svg)](https://github.com/espressif/esp-dl)
 [![Accuracy](https://img.shields.io/badge/Accuracy-93.9%25%20(Clean)%20%7C%2088.1%25%20(Noise)-brightgreen.svg)]()
 
-An end-to-end, fault-tolerant **Distributed TinyML Acoustic Sensor Network** for streaming Keyword Spotting (KWS) across resource-constrained edge microcontrollers (**Seeed Studio XIAO ESP32-S3 Sense** and **Silicon Labs EFR32MG24 ARM Cortex-M33**). 
+An end-to-end, fault-tolerant **Distributed TinyML Acoustic Sensor Network** for streaming Keyword Spotting (KWS) across resource-constrained edge microcontrollers (**Seeed Studio XIAO ESP32-S3 Sense**). 
 
 This system extends [`sciapponi/streamable-kws`](https://github.com/sciapponi/streamable-kws) and eliminates the classical **Acoustic Correlation Trap** (where homogeneous arrays make identical errors on phonetically confusable words like "TREE" vs "THREE") through **Graph-Theoretic Vocabulary Partitioning**, **Universal Overlap Clustering**, **Spatial 4-Bit SNR-Weighted Soft Late Fusion**, and **Bare-Metal Zephyr RTOS C++ Drivers**.
 
@@ -28,6 +28,7 @@ This system extends [`sciapponi/streamable-kws`](https://github.com/sciapponi/st
 - [Empirical Benchmark Results](#-empirical-benchmark-results)
 - [Confusion Matrix Heatmaps (Gaussian Noise)](#-confusion-matrix-heatmaps-under-stationary-gaussian-hvac-noise)
 - [Safety & Squelch Stack](#-safety--squelch-stack)
+- [Acknowledgements](#-acknowledgements)
 - [License](#-license)
 
 ---
@@ -37,8 +38,8 @@ This system extends [`sciapponi/streamable-kws`](https://github.com/sciapponi/st
 ### Step 1: Clone the Repository & Enter Workspace
 
 ```bash
-git clone https://github.com/sciapponi/streamable-kws.git
-cd streamable-kws
+git clone https://github.com/eakkoyunlu/tinyml-distributed-kws-array.git
+cd tinyml-distributed-kws-array
 ```
 
 ### Step 2: Install Python Dependencies
@@ -235,7 +236,7 @@ The gateway will automatically discover all 3 nodes, establish encrypted GATT te
 | **1. Single Device Baseline** | 36 Classes | $R = 1$ | 1/1 (Standalone) | Standard edge setup running the full vocabulary on a single node. Vulnerable to room geometry, distance ($1/r^2$), and phonetic confusion. |
 | **2. 3x Homogeneous Array** | 3x 36 Classes | $R = 3$ (Uniform) | $\ge 2/3$ Nodes | 3 identical devices with identical weights. Suffers from the **Acoustic Correlation Trap**: identical weights mean identical decision boundary blind spots. |
 | **3. 0-Overlap Disjoint MoE** | 13 + 13 + 12 | $R = 1$ (Disjoint) | Specialist Top-1 | Vocabulary is partitioned into 3 disjoint sets with zero class overlap. Maximizes capacity (+200%), but collapses on node failure ($N-1$ battery loss drops accuracy by $-19.5\%$). |
-| **4. Graph-Coupled MoE** | 22 + 22 + 22 | $R \in [1, 2]$ | Specialist Voting | Connects confusable phonetic twins onto the same nodes ($W_{ij} \ge 0.05$), while assigning non-confusable words to single nodes. |
+| **4. Graph-Coupled MoE** | 22 + 22 + 22 | $R \in [1, 3]$ | Specialist Voting | Connects confusable phonetic twins onto the same nodes ($W_{ij} \ge 0.05$), with $R=3$ for top anchor cliques (`tree`/`three`) and $R=1$ for non-confusable words. |
 | **5. Universal Overlap MoE** *(Recommended 3-Node)* | 25 + 25 + 25 | $R \ge 2$ ($R=3$ for Anchors) | $\ge 2/3$ Majority Quorum | **Gold Standard for 3 Nodes:** Every keyword is replicated on at least 2 nodes ($R \ge 2$), while top confusable twins (`tree`/`three`) are Anchors on all 3 nodes ($R=3$). Eliminates single points of failure. |
 | **6. 5-Device 2/5 Ultra-MoE** | 5x ~16 Classes | $R \in [2, 3]$ | $\ge 2/5$ Quorum | High specialization (~16 classes/node). Fast and lightweight, triggering on agreement of any 2 out of 5 nodes. |
 | **7. 5-Device 3/5 Majority MoE** *(Ultimate Resilient)* | 5x ~23 Classes | $R \in [3, 5]$ | $\ge 3/5$ Strict Majority | **Maximum Fault Tolerance:** High overlapping vocabulary (~23 classes/node). When a node suffers battery loss ($N-1$), accuracy drops by **only $-1.3\%$** ($67.1\% \to 65.8\%$) under severe noise. |
@@ -244,7 +245,7 @@ The gateway will automatically discover all 3 nodes, establish encrypted GATT te
 
 ## 📊 Empirical Benchmark Results
 
-### 1. Multi-Condition Acoustic Shootout (1,500 Balanced Test Samples)
+### 1. Multi-Condition Acoustic Shootout (Google Speech Commands v2 Test Partition)
 
 | Architecture / Topology | Class Allocation | Clean Room (High SNR) | Gaussian HVAC Noise | Real ESC-50 Noise |
 | :--- | :---: | :---: | :---: | :---: |
@@ -256,8 +257,19 @@ The gateway will automatically discover all 3 nodes, establish encrypted GATT te
 | **6. 5-Device 2/5 MoE** | 5x ~16 Classes | 93.0% | 86.7% | 67.0% |
 | **7. 5-Device 3/5 Majority MoE** | 5x ~23 Classes | **93.9%** | **88.1%** (+14.2%) | **67.1%** (+10.0%) |
 
+#### 🔊 1. Clean Silent Room Acoustic Shootout (High SNR)
 <p align="center">
-  <img src="docs/assets/02_array_superiority_dashboard.png" alt="Multi-Device Array Superiority Dashboard" width="950"/>
+  <img src="docs/assets/dashboard_clean_room.png" alt="Clean Room Acoustic Dashboard" width="950"/>
+</p>
+
+#### 💨 2. Stationary Gaussian HVAC Noise Shootout
+<p align="center">
+  <img src="docs/assets/dashboard_gaussian_noise.png" alt="Gaussian Stationary Noise Dashboard" width="950"/>
+</p>
+
+#### 🌧️ 3. Real ESC-50 Environmental Background Noise Shootout
+<p align="center">
+  <img src="docs/assets/dashboard_esc50_noise.png" alt="ESC-50 Environmental Noise Dashboard" width="950"/>
 </p>
 
 ---
@@ -279,7 +291,7 @@ The gateway will automatically discover all 3 nodes, establish encrypted GATT te
 
 ## 🟪 Confusion Matrix Heatmaps (Under Stationary Gaussian HVAC Noise)
 
-Evaluated under **Stationary Gaussian HVAC Room Noise (Calibrated SNR)** across 1,500 unseen test utterances. The 3-Device Universal Overlap MoE ($25+25+25$) achieves **88.1% overall accuracy** and completely eliminates pairwise cross-talk between confusable phonetic twins (`TREE` vs `THREE`), driving false alarm rates down to **0.0%**:
+Evaluated across the official Google Speech Commands v2 test set under **Stationary Gaussian HVAC Room Noise (Calibrated SNR)**. The 3-Device Universal Overlap MoE ($25+25+25$) achieves **88.07% overall accuracy** under active room noise, successfully driving the baseline 25.8% `THREE` $\to$ `TREE` false alarm spike down to **0.0%** (achieving **98.1% recall on "THREE"** and **80.6% on "TREE"**):
 
 <p align="center">
   <img src="docs/assets/04_universal_overlap_confusion_matrix.png" alt="Universal Overlap Confusion Matrix under Gaussian HVAC Noise" width="850"/>
@@ -302,6 +314,12 @@ Evaluated under **Stationary Gaussian HVAC Room Noise (Calibrated SNR)** across 
  │ 7. On-Device RMS Energy Squelch      │ RMS < 5.0 skips model execution during silence to save power│
  └──────────────────────────────────────┴─────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 🙏 Acknowledgements
+
+This work extends the baseline single-device streaming MatchboxNet architecture from [`sciapponi/streamable-kws`](https://github.com/sciapponi/streamable-kws) by Simone Ciapponi into a distributed, multi-microcontroller sensor array.
 
 ---
 
