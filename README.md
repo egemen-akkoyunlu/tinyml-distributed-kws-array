@@ -57,9 +57,9 @@ pip install -r requirements.txt
 ## 🌟 Key Architectural Innovations
 
 ### 1. Hybrid INT8/FP32 Microcontroller Execution Engine
-- **Vector SIMD Acceleration:** Offloads 95% of neural network MAC operations (depthwise-separable 1D/2D convolutions) to the Xtensa LX7 dual-core 128-bit Vector SIMD instructions (`esp-dl` kernel `base::mat_vec_dotprod`).
+- **Vector SIMD Acceleration:** Offloads 95% of neural network MAC operations (1D depthwise-separable dilated convolutions in MatchboxNet) to the Xtensa LX7 dual-core 128-bit Vector SIMD instructions (`esp-dl` kernel `base::mat_vec_dotprod`).
 - **Fixed-Point LUTs + Hardware FPU Softmax:** Fast fixed-point Lookup Tables (LUTs) compute Tanh and Sigmoid activations, while output layer Softmax probabilities are computed losslessly via the hardware single-precision Floating Point Unit (`CONFIG_FPU=y`).
-- **SRAM Budgeting & Automatic PSRAM Fallback:** Compresses the model footprint from **133.6 KB (FP32) down to 100.7 KB (INT8)** (1.33x compression) with **negligible accuracy degradation (<0.2%)**. Fits within the strict ~128 KB internal SRAM limit ($83.4\%$ utilization) alongside 32 KB Mel spectrogram sliding buffers, with our custom `esp_heap_caps.cpp` fallback allocator auto-overflowing to 4 MB Octal PSRAM if needed.
+- **SRAM Budgeting & Automatic PSRAM Fallback:** Compresses the model footprint from **133.6 KB (FP32) down to 100.7 KB (INT8)** (1.33x compression) with **negligible accuracy degradation (<0.2%)**. Fits cleanly within the **512 KB internal SRAM** (allocating a strict $<128\text{ KB}$ runtime buffer for intermediate activations and 32 KB Mel spectrogram sliding buffers), with our custom `esp_heap_caps.cpp` fallback allocator auto-overflowing to **8 MB Octal PSRAM** if needed.
 
 <p align="center">
   <img src="docs/assets/01_quantization_comparison.png" alt="INT8 Quantization Comparison" width="650"/>
@@ -67,8 +67,12 @@ pip install -r requirements.txt
 
 ### 2. Eliminating the Acoustic Correlation Trap via Tri-Factor Vulnerability Metric
 - **The Classical Failure Mode:** In traditional multi-microphone arrays where all nodes run the identical generalist model, devices share **identical decision boundary blind spots**. Under room noise and reverberation, homogeneous nodes fail unanimously (e.g. 25.8% false alarm rate on phonetically confusable pairs like `TREE` vs `THREE`).
-- **Mathematical Decomposition of $V(k)$:** The Tri-Factor Acoustic Vulnerability Metric combines three distinct statistical properties from the baseline confusion matrix $C \in \mathbb{R}^{K \times K}$:
-  $$V(k) = 0.70 \cdot \text{Error}(k) + 0.15 \cdot H(k) + 0.15 \cdot \text{Peak}(k)$$
+- **Mathematical Decomposition of $V(k)$:** The Tri-Factor Acoustic Vulnerability Metric combines three distinct statistical properties from the baseline confusion matrix:
+
+```math
+V(k) = 0.70 \cdot \text{Error}(k) + 0.15 \cdot H(k) + 0.15 \cdot \text{Peak}(k)
+```
+
   1. **$\text{Error}(k) = 1.0 - \text{Recall}(k)$ (Empirical Classification Error):** Measures the raw baseline failure rate of class $k$, prioritizing inherently difficult acoustic classes.
   2. **$H(k) = -\frac{1}{\ln(K-1)} \sum_{j \ne k, P_{kj} > 0} P_{kj} \ln(P_{kj})$ (Normalized Confusion Entropy):** Measures the **diffuseness** of false predictions over off-diagonal transitions ($P_{kj} = \frac{C_{kj}}{\sum_{m \ne k} C_{km}}$). Diffuse, non-specific background noise produces high entropy ($H \to 1.0$).
   3. **$\text{Peak}(k) = \max_{j \ne k} P_{kj}$ (Maximum Pairwise Off-Diagonal Peak):** Measures the **sharpness** of the worst pairwise confusion spike. 
@@ -82,16 +86,30 @@ pip install -r requirements.txt
 
 ### 4. 4-Bit Spatial SNR-Weighted Soft Late Fusion
 - **On-Chip Hendriks MMSE Spectral Tracking:** Each edge node executes real-time 40-bin Minimum Mean-Square Error (MMSE) noise estimation directly in C++ on the microcontroller to track continuous background noise floors.
-- **Physical SNR Calculation:** Derives acoustic signal-to-noise ratio: $\text{SNR}_{\text{dB}} = 10 \log_{10}(\text{RMS}^2 / \text{Noise}^2)$.
-- **Sigmoidal Weighting ($w_i \in [1, 15]$):** Maps physical SNR into a compact 4-bit integer spatial weight ($w_i = \text{round}(\sigma(\text{SNR}_i) \times 15)$), granting near-field microphones up to $15\times$ higher voting authority over distant, reverberant microphones.
+- **Physical SNR Calculation:** Derives acoustic signal-to-noise ratio in decibels:
+
+```math
+\text{SNR}_{\text{dB}} = 10 \cdot \log_{10}\left(\frac{\text{RMS}^2}{\max(20.0, \text{Noise} \times 1000.0)}\right)
+```
+
+- **Sigmoidal Weighting ($w_i \in [1, 15]$):** Maps physical SNR into a compact 4-bit integer spatial weight:
+
+```math
+w_i = \text{round}\left( \frac{15}{1 + e^{-(\text{SNR}_{\text{dB}} - 10.0) / 3.5}} \right) \in [1, 15]
+```
+
+  granting near-field microphones up to $15\times$ higher voting authority over distant, reverberant microphones.
 - **Soft Late Fusion Formulation:** Decouples physical acoustic reliability from neural network classification confidence:
-  $$\text{Fused Confidence} = \frac{\sum_{i \in \mathcal{A}} \big(\text{Confidence}_i \times w_i\big)}{\sum_{i \in \mathcal{A}} w_i}$$
+
+```math
+\text{Fused Confidence} = \frac{\sum_{i \in \mathcal{A}} (\text{Confidence}_i \times w_i)}{\sum_{i \in \mathcal{A}} w_i}
+```
 
 ### 5. Multi-Stage False Alarm Defense & Graph-Theoretic Arbiter Veto
 - **Dual-Tier Hardware & Gateway Squelch:**
   1. *Embedded C++ Squelch:* RMS energy bar (<5.0) skips neural execution during silence, 2-consecutive-frame temporal debounce (120 ms), and 150 ms refractory lockout prevent double-triggering.
   2. *Gateway Confidence Margin:* Rejects predictions where the Top-1 vs Top-2 probability margin is $< 15\%$.
-  3. *Dynamic Room Noise Threshold:* Adapts consensus trigger bar to room acoustics: $T_{\text{dyn}} = \min(72\%, \max(54\%, 58\% + 14 \times \text{Noise}))$.
+  3. *Dynamic Room Noise Threshold:* Adapts consensus trigger bar to room acoustics: `T_dyn = min(72%, max(54%, 58% + 14 * Noise))`.
   4. *Graph-Theoretic Arbiter Veto:* When a specialist node covering both words predicts word $A$ with $\ge 70\%$ confidence, it automatically vetoes any out-of-vocabulary proposal of word $B$ from sibling nodes that lack $A$ in their vocabulary.
 
 ### 6. Fail-Stop Hardware Fault Tolerance & Battery Depletion Resilience
@@ -100,9 +118,16 @@ pip install -r requirements.txt
 
 ### 7. Production Embedded Zephyr RTOS C++ Stack & Binary BLE Protocol
 - **Zero-Copy I2S DMA Streaming:** PDM microphone data is streamed directly via DMA memory slabs into circular sliding window buffers without CPU memcpy overhead.
-- **Ultra-Compact 10-Byte GATT Telemetry & 0.3 ms Airtime Derivation:**
-  - Encodes timestamp (32-bit), Top-1 Class ID (8-bit), Confidence (8-bit), RMS Energy (8-bit), Hendriks Noise Floor (8-bit), and Status Flags into a 10-byte binary payload.
-  - *Physical Frame Math:* Total packet (Preamble + Access Address + LL Header + ATT Handle + 10B Payload + 3B CRC) = **28 bytes (224 bits)**. Over Bluetooth LE 1M PHY (1 Mbps = 1.0 $\mu$s/bit), the raw transmission takes **$0.224\text{ ms} \approx 0.3\text{ ms}$ airtime** (duty cycle $<0.1\%$).
+- **Exact 10-Byte Bit-Packed Binary GATT Telemetry:**
+  - Encodes the complete state into the packed C struct `BleKwsPacket` (`zephyr_kws/src/ble_server.h`):
+    - `ts_ms`: Hardware Timestamp in milliseconds (`uint32_t`, **4 Bytes**)
+    - `noise_x1k`: Linear Noise Floor $\times 1000$ (`uint16_t`, **2 Bytes**)
+    - `dev_id`: Device ID 1/2/3 (`uint8_t`, **1 Byte**)
+    - `top_class`: Predicted Class Index (`uint8_t`, **1 Byte**)
+    - `conf`: Confidence percentage 0–100 (`uint8_t`, **1 Byte**)
+    - `rms`: Audio RMS Energy intensity (`uint8_t`, **1 Byte**)
+    - **Total Bit-Packed Payload:** $4 + 2 + 1 + 1 + 1 + 1 = \mathbf{10\text{ Bytes}}$ (with zero padding).
+  - *Physical Frame Airtime Derivation:* Total packet over-the-air (Preamble + Access Address + LL Header + ATT Handle + 10B Payload + 3B CRC) = **28 bytes (224 bits)**. Over Bluetooth LE 1M PHY (1 Mbps = 1.0 $\mu$s/bit), the transmission takes **$0.224\text{ ms} \approx 0.3\text{ ms}$ airtime** (duty cycle $<0.1\%$).
   - *Energy Impact:* Eliminates continuous $256\text{ kbps}$ raw audio streaming, cutting BLE radio active power by **$>99\%$** and enabling multi-month coin-cell battery life.
 - **Adaptive OLS Clock Synchronization:** An Adaptive Sliding Window Ordinary Least Squares (OLS) estimator continuously synchronizes node clocks to the master gateway time with a physical $\pm 500$ ppm quartz crystal clamp.
 
@@ -280,9 +305,11 @@ The gateway automatically discovers all 3 nodes, establishes encrypted binary GA
 
 The gateway decouples **Physical Acoustic Reliability (Signal Physics)** from **Neural Network Confidence (Model Probability)** via the two-stage soft late fusion formulation:
 
-$$\text{Fused Confidence} = \frac{\sum_{i \in \mathcal{A}} \big(\text{Confidence}_i \times w_i\big)}{\sum_{i \in \mathcal{A}} w_i}$$
+```math
+\text{Fused Confidence} = \frac{\sum_{i \in \mathcal{A}} (\text{Confidence}_i \times w_i)}{\sum_{i \in \mathcal{A}} w_i}
+```
 
-Where $w_i = \text{round}\big(\sigma(\text{SNR}_i) \times 15\big) \in [1, 15]$ is the 4-bit integer spatial weight derived on-chip from speech energy vs Hendriks MMSE noise floor.
+Where `w_i = round(sigma(SNR_i) * 15) in [1, 15]` is the 4-bit integer spatial weight derived on-chip from speech energy vs Hendriks MMSE noise floor.
 
 From our live physical hardware deployment, three distinct acoustic regimes govern weighting and consensus:
 
@@ -300,8 +327,12 @@ From our live physical hardware deployment, three distinct acoustic regimes gove
    - **Observed Telemetry:** Node 2 ($\text{Conf}=98.0\%, w=11$), Node 3 ($\text{Conf}=95.0\%, w=14$).
    - **Acoustic Rationale:** Both nodes operate in high SNR ($\text{RMS} \ge 40.0$).
    - **Fusion Impact:** Produces an ultra-sharp consensus:
-     $$\text{Fused Conf} = \frac{(98.0 \times 11) + (95.0 \times 14)}{11 + 14} = \mathbf{96.3\%}$$
-     Completely eliminating false alarms between confusable acoustic twins.
+
+```math
+\text{Fused Conf} = \frac{(98.0 \times 11) + (95.0 \times 14)}{11 + 14} = \mathbf{96.3\%}
+```
+
+   Completely eliminating false alarms between confusable acoustic twins.
 
 ---
 
