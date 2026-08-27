@@ -431,7 +431,7 @@ Evaluated across the official Google Speech Commands v2 test set under **Station
 
 **Egemen Acar Akkoyunlu**  
 - 🔬 Research Intern, **Fondazione Bruno Kessler (FBK)**, Trento, Italy  
-- 🎓 Department of Electrical and Electronics Engineering, **Boğaziçi University**, Istanbul, Turkey  
+- 🎓 Electrical and Electronics Engineering, **Boğaziçi University**, Istanbul, Turkey  
 - 🌐 [GitHub: @eakkoyunlu](https://github.com/eakkoyunlu)
 
 ---
