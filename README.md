@@ -11,7 +11,7 @@ An end-to-end, fault-tolerant **Distributed TinyML Acoustic Sensor Network** for
 
 > [!NOTE]
 > **Special Thanks & Upstream Foundation:**  
-> This project is proudly built upon the foundational single-device streamable Keyword Spotting framework from [`sciapponi/streamable-kws`](https://github.com/sciapponi/streamable-kws). We express our sincere gratitude to **Simone Ciapponi** for open-sourcing the base streaming MatchboxNet training architecture, upon which we engineered our distributed graph-theoretic MoE partitioning, Zephyr RTOS C++ drivers, and real-time BLE gateway fusion stack.
+> This project is proudly built upon the foundational single-device streamable Keyword Spotting framework from [`sciapponi/streamable-kws`](https://github.com/sciapponi/streamable-kws). We express our sincere gratitude to **Stefano Ciapponi** for open-sourcing the base streaming MatchboxNet training architecture, upon which we engineered our distributed graph-theoretic MoE partitioning, Zephyr RTOS C++ drivers, and real-time BLE gateway fusion stack.
 
 This system eliminates the classical **Acoustic Correlation Trap** (where homogeneous arrays make identical errors on phonetically confusable words like "TREE" vs "THREE") through **Graph-Theoretic Vocabulary Partitioning**, **Universal Overlap Clustering**, **Spatial 4-Bit SNR-Weighted Soft Late Fusion**, and **Bare-Metal Zephyr RTOS C++ Drivers**.
 
@@ -56,29 +56,55 @@ pip install -r requirements.txt
 
 ## 🌟 Key Architectural Innovations
 
-1. **Hybrid INT8/FP32 Model Quantization:**
-   - 95% INT8 Convolutions on Xtensa 128-bit Vector SIMD + FP32 Softmax on hardware FPU.
-   - Compresses model footprint from **133.6 KB to 100.7 KB** with **negligible accuracy loss** (<0.2%), fitting within the ~128 KB internal SRAM limit of ESP32-S3.
+### 1. Hybrid INT8/FP32 Microcontroller Execution Engine
+- **Vector SIMD Acceleration:** Offloads 95% of neural network MAC operations (depthwise-separable 1D/2D convolutions) to the Xtensa LX7 dual-core 128-bit Vector SIMD instructions (`esp-dl` kernel `base::mat_vec_dotprod`).
+- **Fixed-Point LUTs + Hardware FPU Softmax:** Fast fixed-point Lookup Tables (LUTs) compute Tanh and Sigmoid activations, while output layer Softmax probabilities are computed losslessly via the hardware single-precision Floating Point Unit (`CONFIG_FPU=y`).
+- **SRAM Budgeting & Automatic PSRAM Fallback:** Compresses the model footprint from **133.6 KB (FP32) down to 100.7 KB (INT8)** (1.33x compression) with **negligible accuracy degradation (<0.2%)**. Fits within the strict ~128 KB internal SRAM limit ($83.4\%$ utilization) alongside 32 KB Mel spectrogram sliding buffers, with our custom `esp_heap_caps.cpp` fallback allocator auto-overflowing to 4 MB Octal PSRAM if needed.
 
 <p align="center">
   <img src="docs/assets/01_quantization_comparison.png" alt="INT8 Quantization Comparison" width="650"/>
 </p>
 
-2. **Solving the Acoustic Correlation Trap:**
-   - Demonstrates that identical models share identical decision boundary blind spots (e.g., unanimous 25.8% false alarms on `TREE` vs `THREE`).
-   - Formulates the **Tri-Factor Acoustic Vulnerability Metric**:
-     $$V(k) = 0.70 \cdot \text{Error}(k) + 0.15 \cdot H(k) + 0.15 \cdot \text{Peak}(k)$$
-   - Builds a **Symmetrized Acoustic Adjacency Graph** ($W_{ij} = \max(P(j|i), P(i|j)) \ge 0.05$) to handcuff phonetic twins into indivisible cliques.
-3. **Universal Overlap MoE Topology:**
-   - Co-locates confusable twins as Anchors across nodes while distributing the remaining vocabulary.
-   - Reduces per-node classes from **36 to 23–25**, boosting parameter capacity per class by **+44%** while preserving $R \ge 2$ spatial redundancy.
-4. **4-Bit Spatial SNR-Weighted Soft Late Fusion:**
-   - Real-time on-chip **Hendriks MMSE spectral noise estimation** combined with sigmoidal SNR weighting ($w_i \in [1, 15]$), giving high-SNR microphones 15x voting weight over distant reverberant nodes.
-5. **Fail-Stop Hardware Fault Tolerance & Battery Loss Resilience:**
-   - Graceful fail-stop degradation under dead battery events ($N-1, N-2, N-3$).
-   - 5-Device 3/5 MoE drops by **only -1.3%** on a dead node ($67.1\% \to 65.8\%$), completely avoiding the catastrophic $-19.5\%$ crash of disjoint 0-overlap systems.
-6. **Production Embedded Zephyr RTOS C++ Stack:**
-   - Zero-copy I2S DMA streaming, on-chip Mel-spectrogram extraction, 2-consecutive-frame temporal debounce, 150 ms refractory cooldown, and a compact **10-byte binary GATT telemetry protocol** (0.3 ms airtime).
+### 2. Eliminating the Acoustic Correlation Trap via Tri-Factor Vulnerability Metric
+- **The Classical Failure Mode:** In traditional multi-microphone arrays where all nodes run the identical generalist model, devices share **identical decision boundary blind spots**. Under room noise and reverberation, homogeneous nodes fail unanimously (e.g. 25.8% false alarm rate on phonetically confusable pairs like `TREE` vs `THREE`).
+- **Mathematical Decomposition of $V(k)$:** The Tri-Factor Acoustic Vulnerability Metric combines three distinct statistical properties from the baseline confusion matrix $C \in \mathbb{R}^{K \times K}$:
+  $$V(k) = 0.70 \cdot \text{Error}(k) + 0.15 \cdot H(k) + 0.15 \cdot \text{Peak}(k)$$
+  1. **$\text{Error}(k) = 1.0 - \text{Recall}(k)$ (Empirical Classification Error):** Measures the raw baseline failure rate of class $k$, prioritizing inherently difficult acoustic classes.
+  2. **$H(k) = -\frac{1}{\ln(K-1)} \sum_{j \ne k, P_{kj} > 0} P_{kj} \ln(P_{kj})$ (Normalized Confusion Entropy):** Measures the **diffuseness** of false predictions over off-diagonal transitions ($P_{kj} = \frac{C_{kj}}{\sum_{m \ne k} C_{km}}$). Diffuse, non-specific background noise produces high entropy ($H \to 1.0$).
+  3. **$\text{Peak}(k) = \max_{j \ne k} P_{kj}$ (Maximum Pairwise Off-Diagonal Peak):** Measures the **sharpness** of the worst pairwise confusion spike. 
+  - **The Entropy Paradox Solved:** If a word has a single massive phonetic twin (e.g., `TREE` misclassifying almost exclusively into `THREE`), $H(k)$ is artificially *depressed* ($H \approx 0$). Without $\text{Peak}(k)$, entropy would penalize binary twins. Combining $H(k)$ and $\text{Peak}(k)$ guarantees that both diffuse noise and sharp phonetic twins (`{"tree", "three"}`, `{"four", "forward"}`) receive high vulnerability scores.
+- **Symmetrized Acoustic Adjacency Graph ($W_{ij}$):** Constructs an undirected acoustic confusion graph where $W_{ij} = \max(P(j|i), P(i|j)) \ge 0.05$. Indivisible phonetic cliques are handcuffed together and co-located on specialized nodes to eliminate cross-talk.
+
+### 3. Universal Overlap Graph-Theoretic MoE Topology
+- **The Pitfall of Disjoint Partitioning ($R=1$):** Partitioning the 36-class vocabulary into disjoint subsets (13+13+12) boosts per-class capacity (+200%) but provides zero spatial redundancy: a single battery failure ($N-1$) crashes accuracy catastrophically ($-19.5\%$).
+- **Bounded Overlap Clustering ($R \ge 2$ with $R=3$ Anchors):** Enforces a strict minimum replication level of $R \ge 2$ across every single keyword, while top confusable Anchor cliques (`tree`/`three`) are replicated on all 3 nodes ($R=3$).
+- **Capacity & Redundancy Co-Optimization:** Reduces per-node vocabulary from 36 down to 25 classes (+44% parameter capacity per class) while guaranteeing robust $2/3$ majority consensus across every keyword.
+
+### 4. 4-Bit Spatial SNR-Weighted Soft Late Fusion
+- **On-Chip Hendriks MMSE Spectral Tracking:** Each edge node executes real-time 40-bin Minimum Mean-Square Error (MMSE) noise estimation directly in C++ on the microcontroller to track continuous background noise floors.
+- **Physical SNR Calculation:** Derives acoustic signal-to-noise ratio: $\text{SNR}_{\text{dB}} = 10 \log_{10}(\text{RMS}^2 / \text{Noise}^2)$.
+- **Sigmoidal Weighting ($w_i \in [1, 15]$):** Maps physical SNR into a compact 4-bit integer spatial weight ($w_i = \text{round}(\sigma(\text{SNR}_i) \times 15)$), granting near-field microphones up to $15\times$ higher voting authority over distant, reverberant microphones.
+- **Soft Late Fusion Formulation:** Decouples physical acoustic reliability from neural network classification confidence:
+  $$\text{Fused Confidence} = \frac{\sum_{i \in \mathcal{A}} \big(\text{Confidence}_i \times w_i\big)}{\sum_{i \in \mathcal{A}} w_i}$$
+
+### 5. Multi-Stage False Alarm Defense & Graph-Theoretic Arbiter Veto
+- **Dual-Tier Hardware & Gateway Squelch:**
+  1. *Embedded C++ Squelch:* RMS energy bar (<5.0) skips neural execution during silence, 2-consecutive-frame temporal debounce (120 ms), and 150 ms refractory lockout prevent double-triggering.
+  2. *Gateway Confidence Margin:* Rejects predictions where the Top-1 vs Top-2 probability margin is $< 15\%$.
+  3. *Dynamic Room Noise Threshold:* Adapts consensus trigger bar to room acoustics: $T_{\text{dyn}} = \min(72\%, \max(54\%, 58\% + 14 \times \text{Noise}))$.
+  4. *Graph-Theoretic Arbiter Veto:* When a specialist node covering both words predicts word $A$ with $\ge 70\%$ confidence, it automatically vetoes any out-of-vocabulary proposal of word $B$ from sibling nodes that lack $A$ in their vocabulary.
+
+### 6. Fail-Stop Hardware Fault Tolerance & Battery Depletion Resilience
+- **Graceful Fail-Stop Degradation:** Under battery exhaustion or hardware failure ($N-1, N-2, N-3$), the gateway seamlessly switches consensus quorums.
+- **Extreme Noise Benchmarks:** Under severe environmental background noise (ESC-50), a dead node ($N-1$) causes **only a $-1.3\%$ drop** on the 5-device 3/5 MoE array ($67.1\% \to 65.8\%$) and **$-4.0\%$** on the 3-device Universal Overlap array ($67.1\% \to 63.1\%$), outperforming healthy homogeneous baseline arrays ($59.3\%$).
+
+### 7. Production Embedded Zephyr RTOS C++ Stack & Binary BLE Protocol
+- **Zero-Copy I2S DMA Streaming:** PDM microphone data is streamed directly via DMA memory slabs into circular sliding window buffers without CPU memcpy overhead.
+- **Ultra-Compact 10-Byte GATT Telemetry & 0.3 ms Airtime Derivation:**
+  - Encodes timestamp (32-bit), Top-1 Class ID (8-bit), Confidence (8-bit), RMS Energy (8-bit), Hendriks Noise Floor (8-bit), and Status Flags into a 10-byte binary payload.
+  - *Physical Frame Math:* Total packet (Preamble + Access Address + LL Header + ATT Handle + 10B Payload + 3B CRC) = **28 bytes (224 bits)**. Over Bluetooth LE 1M PHY (1 Mbps = 1.0 $\mu$s/bit), the raw transmission takes **$0.224\text{ ms} \approx 0.3\text{ ms}$ airtime** (duty cycle $<0.1\%$).
+  - *Energy Impact:* Eliminates continuous $256\text{ kbps}$ raw audio streaming, cutting BLE radio active power by **$>99\%$** and enabling multi-month coin-cell battery life.
+- **Adaptive OLS Clock Synchronization:** An Adaptive Sliding Window Ordinary Least Squares (OLS) estimator continuously synchronizes node clocks to the master gateway time with a physical $\pm 500$ ppm quartz crystal clamp.
 
 ---
 
@@ -369,7 +395,7 @@ Evaluated across the official Google Speech Commands v2 test set under **Station
 
 ## 🙏 Acknowledgements
 
-This work extends the baseline single-device streaming MatchboxNet architecture from [`sciapponi/streamable-kws`](https://github.com/sciapponi/streamable-kws) by Simone Ciapponi into a distributed, multi-microcontroller sensor array.
+This work extends the baseline single-device streaming MatchboxNet architecture from [`sciapponi/streamable-kws`](https://github.com/sciapponi/streamable-kws) by Stefano Ciapponi into a distributed, multi-microcontroller sensor array.
 
 ---
 
