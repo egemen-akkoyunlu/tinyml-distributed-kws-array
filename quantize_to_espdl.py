@@ -82,6 +82,10 @@ def main():
 
     if len(sys.argv) > 1:
         log_dir = sys.argv[1]
+        if not os.path.exists(os.path.join(log_dir, ".hydra", "config.yaml")):
+            sub_dirs = sorted(glob.glob(os.path.join(log_dir, "*/")), key=os.path.getmtime)
+            if sub_dirs:
+                log_dir = sub_dirs[-1].rstrip("/")
         print(f"Using specified log directory: {log_dir}")
     else:
         # Automatically find the latest run folder under logs/
