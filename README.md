@@ -180,14 +180,14 @@ python3 optimize_smart_overlap_allocation.py --nodes 5
 Quantize each device's trained PyTorch model into calibrated INT8 `.espdl` binaries:
 
 ```bash
-# 1. Quantize Node 1
-python3 quantize_to_espdl.py --config config/kws_smart_overlap_dev1_25classes.yaml
+# 1. Quantize Node 1 (25 classes)
+python3 quantize_to_espdl.py logs/kws_smart_overlap_dev1_25classes
 
-# 2. Quantize Node 2
-python3 quantize_to_espdl.py --config config/kws_smart_overlap_dev2_25classes.yaml
+# 2. Quantize Node 2 (25 classes)
+python3 quantize_to_espdl.py logs/kws_smart_overlap_dev2_25classes
 
-# 3. Quantize Node 3
-python3 quantize_to_espdl.py --config config/kws_smart_overlap_dev3_25classes.yaml
+# 3. Quantize Node 3 (25 classes)
+python3 quantize_to_espdl.py logs/kws_smart_overlap_dev3_25classes
 ```
 
 ---
@@ -225,7 +225,53 @@ Once all 3 microcontrollers are powered on and streaming BLE telemetry:
 python3 multi_device_fusion.py
 ```
 
-The gateway will automatically discover all 3 nodes, establish encrypted GATT telemetry streams, compute 4-bit SNR weights in real time, and output consensus keyword spot events with zero false alarms!
+The gateway automatically discovers all 3 nodes, establishes encrypted binary GATT telemetry streams, continuously tracks Hendriks MMSE noise floors, computes 4-bit SNR weights ($w_i \in [1, 15]$), compensates for clock skew via Ordinary Least Squares (OLS), and outputs real-time consensus keyword triggers:
+
+#### 📡 Real-World Physical Hardware Live Telemetry Output (3x XIAO ESP32-S3 Sense):
+```text
+*** [FUSED TRIGGER: STOP (99.1% >= 61% | 2-NODE SNR CONSENSUS | OLS Skew: 2.5ms)] ***
+    ├── Dev 2 (XIAO_SENSE_BLE_2): STOP (98.0%)  | Audio RMS: 52.0  | Linear Noise: 0.065 | 4-Bit Weight: 13/15 | OLS TS: 71789ms | XTAL Drift: -500.0ppm
+    ├── Dev 3 (XIAO_SENSE_BLE_3): STOP (100.0%) | Audio RMS: 188.0 | Linear Noise: 0.089 | 4-Bit Weight: 15/15 | OLS TS: 71786ms | XTAL Drift: -201.5ppm
+
+*** [FUSED TRIGGER: THREE (96.3% >= 61% | 2-NODE SNR CONSENSUS | OLS Skew: 25.5ms)] ***
+    ├── Dev 2 (XIAO_SENSE_BLE_2): THREE (98.0%) | Audio RMS: 41.0  | Linear Noise: 0.070 | 4-Bit Weight: 11/15 | OLS TS: 317871ms | XTAL Drift: -337.2ppm
+    ├── Dev 3 (XIAO_SENSE_BLE_3): THREE (95.0%) | Audio RMS: 82.0  | Linear Noise: 0.084 | 4-Bit Weight: 14/15 | OLS TS: 317897ms | XTAL Drift: +6.5ppm
+
+*** [FUSED TRIGGER: TREE (99.5% >= 61% | 2-NODE SNR CONSENSUS | OLS Skew: 10.9ms)] ***
+    ├── Dev 2 (XIAO_SENSE_BLE_2): TREE (99.0%)  | Audio RMS: 48.0  | Linear Noise: 0.073 | 4-Bit Weight: 12/15 | OLS TS: 319571ms | XTAL Drift: -187.4ppm
+    ├── Dev 3 (XIAO_SENSE_BLE_3): TREE (100.0%) | Audio RMS: 83.0  | Linear Noise: 0.078 | 4-Bit Weight: 14/15 | OLS TS: 319582ms | XTAL Drift: +72.9ppm
+
+*** [FUSED TRIGGER: FORWARD (96.1% >= 61% | 2-NODE SNR CONSENSUS | OLS Skew: 190.1ms)] ***
+    ├── Dev 1 (XIAO_SENSE_BLE_1): FORWARD (92.0%)  | Audio RMS: 70.0 | Linear Noise: 0.087 | 4-Bit Weight: 13/15 | OLS TS: 170296ms | XTAL Drift: +500.0ppm
+    ├── Dev 3 (XIAO_SENSE_BLE_3): FORWARD (100.0%) | Audio RMS: 88.0 | Linear Noise: 0.094 | 4-Bit Weight: 14/15 | OLS TS: 170106ms | XTAL Drift: -500.0ppm
+```
+
+#### 🔬 Real-World 4-Bit SNR Weighting & Soft Fusion Regimes Explained
+
+The gateway decouples **Physical Acoustic Reliability (Signal Physics)** from **Neural Network Confidence (Model Probability)** via the two-stage soft late fusion formulation:
+
+$$\text{Fused Confidence} = \frac{\sum_{i \in \mathcal{A}} \big(\text{Confidence}_i \times w_i\big)}{\sum_{i \in \mathcal{A}} w_i}$$
+
+Where $w_i = \text{round}\big(\sigma(\text{SNR}_i) \times 15\big) \in [1, 15]$ is the 4-bit integer spatial weight derived on-chip from speech energy vs Hendriks MMSE noise floor.
+
+From our live physical hardware deployment, three distinct acoustic regimes govern weighting and consensus:
+
+1. **Spatial Proximity & Inverse-Square Law Domination ($13/15$ vs $1/15$) — e.g. `RIGHT`:**
+   - **Observed Telemetry:** Node 1 ($\text{RMS}=60.0, \text{Noise}=0.070 \to w=13$), Node 2 ($\text{RMS}=8.0, \text{Noise}=0.067 \to w=1$).
+   - **Acoustic Rationale:** The speaker was positioned close to Node 1. Due to $1/r^2$ attenuation, Node 2 captured distant, reverberant speech.
+   - **Fusion Impact:** Node 1 receives **$92.8\%$ of the voting authority** ($\frac{13}{14}$), preventing far-field room echoes from distorting the fused prediction ($99.1\%$).
+
+2. **Noise Floor Penalization at Similar Speech Volume ($8/15$ vs $6/15$) — e.g. `VISUAL` & `NINE`:**
+   - **Observed Telemetry:** Node 1 ($\text{RMS}=28.0, \text{Noise}=0.077 \to w=8$), Node 3 ($\text{RMS}=25.0, \text{Noise}=0.083 \to w=6$).
+   - **Acoustic Rationale:** Both nodes capture similar moderate voice energy, but Node 3 operates in a slightly noisier acoustic zone (higher noise floor).
+   - **Fusion Impact:** The cleaner channel automatically receives higher authority ($8/15$ vs $6/15$), rewarding microphones with higher signal clarity.
+
+3. **Multi-Node Balanced Consensus ($11/15$ vs $14/15$) — e.g. `THREE` & `TREE`:**
+   - **Observed Telemetry:** Node 2 ($\text{Conf}=98.0\%, w=11$), Node 3 ($\text{Conf}=95.0\%, w=14$).
+   - **Acoustic Rationale:** Both nodes operate in high SNR ($\text{RMS} \ge 40.0$).
+   - **Fusion Impact:** Produces an ultra-sharp consensus:
+     $$\text{Fused Conf} = \frac{(98.0 \times 11) + (95.0 \times 14)}{11 + 14} = \mathbf{96.3\%}$$
+     Completely eliminating false alarms between confusable acoustic twins.
 
 ---
 
