@@ -33,6 +33,7 @@ This system eliminates the classical **Acoustic Correlation Trap** (where homoge
 - [Empirical Benchmark Results](#-empirical-benchmark-results)
 - [Confusion Matrix Heatmaps (Gaussian Noise)](#-confusion-matrix-heatmaps-under-stationary-gaussian-hvac-noise)
 - [Safety & Squelch Stack](#-safety--squelch-stack)
+- [Author & Affiliations](#-author--affiliations)
 - [Acknowledgements](#-acknowledgements)
 - [License](#-license)
 
@@ -423,6 +424,15 @@ Evaluated across the official Google Speech Commands v2 test set under **Station
  │ 7. On-Device RMS Energy Squelch      │ RMS < 5.0 skips model execution during silence to save power│
  └──────────────────────────────────────┴─────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 👤 Author & Affiliations
+
+**Egemen Acar Akkoyunlu**  
+- 🔬 Research Intern, **Fondazione Bruno Kessler (FBK)**, Trento, Italy  
+- 🎓 Department of Electrical and Electronics Engineering, **Boğaziçi University**, Istanbul, Turkey  
+- 🌐 [GitHub: @eakkoyunlu](https://github.com/eakkoyunlu)
 
 ---
 
