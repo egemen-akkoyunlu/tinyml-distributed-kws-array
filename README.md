@@ -1,6 +1,7 @@
 # 🎙️ Distributed Smart-Overlap Keyword Spotting (KWS) Sensor Array
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Python](https://img.shields.io/badge/Python-3.12.3-blue.svg)](https://www.python.org/)
 [![Base Repo](https://img.shields.io/badge/Base_Repo-sciapponi%2Fstreamable--kws-blue.svg)](https://github.com/sciapponi/streamable-kws)
 [![Zephyr RTOS](https://img.shields.io/badge/RTOS-Zephyr_3.7+-purple.svg)](https://zephyrproject.org/)
 [![Hardware](https://img.shields.io/badge/Hardware-Seeed_XIAO_ESP32--S3_Sense-orange.svg)](https://www.seeedstudio.com/XIAO-ESP32S3-Sense-p-5639.html)
@@ -20,7 +21,7 @@ This system eliminates the classical **Acoustic Correlation Trap** (where homoge
 ---
 
 ## 📑 Table of Contents
-- [Quickstart: Clone & Setup](#-quickstart-clone--setup)
+- [Quickstart & Environment Setup](#-quickstart--environment-setup)
 - [Key Architectural Innovations](#-key-architectural-innovations)
 - [3-Device System Architecture Diagram](#-3-device-system-architecture-diagram)
 - [Directory & File Overview](#-directory--file-overview)
@@ -40,19 +41,41 @@ This system eliminates the classical **Acoustic Correlation Trap** (where homoge
 
 ---
 
-## 🚀 Quickstart: Clone & Setup
+## 🚀 Quickstart & Environment Setup
 
-### Step 1: Clone the Repository & Enter Workspace
+### 🐍 Step 1: Python Environment Setup (Python 3.12.3)
 
 ```bash
+# 1. Clone the repository & enter directory
 git clone https://github.com/egemen-akkoyunlu/tinyml-distributed-kws-array.git
 cd tinyml-distributed-kws-array
+
+# 2. Create & activate virtual environment (Python 3.12.3)
+python3 -m venv kws_env
+source kws_env/bin/activate
+
+# 3. Install Python dependencies
+pip install -r requirements.txt
 ```
 
-### Step 2: Install Python Dependencies
+---
+
+### ⚡ Step 2: Zephyr RTOS & Toolchain Setup (Firmware Development)
+
+The embedded C++ firmware runs on **Zephyr RTOS (v3.7+)**. For first-time setup, follow the official [Zephyr Getting Started Guide](https://docs.zephyrproject.org/latest/develop/getting_started/index.html) and [Seeed Studio XIAO ESP32S3 Board Documentation](https://docs.zephyrproject.org/latest/boards/seeed/xiao_esp32s3/doc/index.html).
 
 ```bash
-pip install -r requirements.txt
+# 1. Install West (Zephyr meta-tool) & dependencies
+pip install west
+
+# 2. Initialize and sync Zephyr RTOS workspace (v3.7+)
+west init ~/zephyrproject && cd ~/zephyrproject
+west update && west zephyr-export
+pip install -r zephyr/scripts/requirements.txt
+
+# 3. Clone ESP-DL (Vector SIMD acceleration library) into your workspace
+cd -  # Return to tinyml-distributed-kws-array workspace
+git clone https://github.com/espressif/esp-dl.git
 ```
 
 ---
