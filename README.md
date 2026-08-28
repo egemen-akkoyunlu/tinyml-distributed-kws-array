@@ -1,4 +1,4 @@
-# 🎙️ Distributed Graph-Theoretic Keyword Spotting (KWS) Sensor Array
+# 🎙️ Distributed Smart-Overlap Keyword Spotting (KWS) Sensor Array
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Base Repo](https://img.shields.io/badge/Base_Repo-sciapponi%2Fstreamable--kws-blue.svg)](https://github.com/sciapponi/streamable-kws)
@@ -13,9 +13,9 @@ An end-to-end, fault-tolerant **Distributed TinyML Acoustic Sensor Network** for
 
 > [!NOTE]
 > **Special Thanks & Upstream Foundation:**  
-> This project is proudly built upon the foundational single-device streamable Keyword Spotting framework from [`sciapponi/streamable-kws`](https://github.com/sciapponi/streamable-kws). We express our sincere gratitude to **Stefano Ciapponi** for open-sourcing the base streaming MatchboxNet training architecture, upon which we engineered our distributed graph-theoretic vocabulary partitioning, Zephyr RTOS C++ drivers, and real-time BLE gateway fusion stack.
+> This project is proudly built upon the foundational single-device streamable Keyword Spotting framework from [`sciapponi/streamable-kws`](https://github.com/sciapponi/streamable-kws). We express our sincere gratitude to **Stefano Ciapponi** for open-sourcing the base streaming MatchboxNet training architecture, upon which we engineered our distributed smart-overlap vocabulary partitioning, Zephyr RTOS C++ drivers, and real-time BLE gateway fusion stack.
 
-This system eliminates the classical **Acoustic Correlation Trap** (where homogeneous arrays make identical errors on phonetically confusable words like "TREE" vs "THREE") through **Graph-Theoretic Vocabulary Partitioning**, **Universal Overlap Clustering**, **Spatial 4-Bit SNR-Weighted Soft Late Fusion**, and **Bare-Metal Zephyr RTOS C++ Drivers**.
+This system eliminates the classical **Acoustic Correlation Trap** (where homogeneous arrays make identical errors on phonetically confusable words like "TREE" vs "THREE") through **Phonetic Confusion-Aware Vocabulary Partitioning**, **Universal Overlap Clustering**, **Spatial 4-Bit SNR-Weighted Soft Late Fusion**, and **Bare-Metal Zephyr RTOS C++ Drivers**.
 
 ---
 
@@ -26,7 +26,7 @@ This system eliminates the classical **Acoustic Correlation Trap** (where homoge
 - [Directory & File Overview](#-directory--file-overview)
 - [End-to-End Pipeline & Deployment Guide](#-end-to-end-pipeline--deployment-guide)
   - [1. Model Training](#1-model-training)
-  - [2. Graph-Theoretic Vocabulary Optimizer](#2-graph-theoretic-vocabulary-optimizer)
+  - [2. Acoustic Vocabulary Partition Optimizer](#2-acoustic-vocabulary-partition-optimizer)
   - [3. Device-Wise INT8 Quantization Export (Dev 1, Dev 2, Dev 3)](#3-device-wise-int8-quantization-export-dev-1-dev-2-dev-3)
   - [4. Flashing Physical Microcontrollers (Device IDs 1, 2, 3)](#4-flashing-physical-microcontrollers-device-ids-1-2-3)
   - [5. Live Multi-Device Real-Time Gateway Fusion](#5-live-multi-device-real-time-gateway-fusion)
@@ -84,9 +84,9 @@ V(k) = 0.70 \cdot \text{Error}(k) + 0.15 \cdot H(k) + 0.15 \cdot \text{Peak}(k)
   2. **$H(k) = -\frac{1}{\ln(K-1)} \sum_{j \ne k, P_{kj} > 0} P_{kj} \ln(P_{kj})$ (Normalized Confusion Entropy):** Measures the **diffuseness** of false predictions over off-diagonal transitions ($P_{kj} = \frac{C_{kj}}{\sum_{m \ne k} C_{km}}$). Diffuse, non-specific background noise produces high entropy ($H \to 1.0$).
   3. **$\text{Peak}(k) = \max_{j \ne k} P_{kj}$ (Maximum Pairwise Off-Diagonal Peak):** Measures the **sharpness** of the worst pairwise confusion spike. 
   - **The Entropy Paradox Solved:** If a word has a single massive phonetic twin (e.g., `TREE` misclassifying almost exclusively into `THREE`), $H(k)$ is artificially *depressed* ($H \approx 0$). Without $\text{Peak}(k)$, entropy would penalize binary twins. Combining $H(k)$ and $\text{Peak}(k)$ guarantees that both diffuse noise and sharp phonetic twins (`{"tree", "three"}`, `{"four", "forward"}`) receive high vulnerability scores.
-- **Symmetrized Acoustic Adjacency Graph ($W_{ij}$):** Constructs an undirected acoustic confusion graph where $W_{ij} = \max(P(j|i), P(i|j)) \ge 0.05$. Indivisible phonetic cliques are handcuffed together and co-located on specialized nodes to eliminate cross-talk.
+- **Symmetrized Confusion Matrix Coupling ($W_{ij}$):** Constructs a bidirectional phonetic confusion coupling matrix where $W_{ij} = \max(P(j|i), P(i|j)) \ge 0.05$. Indivisible phonetic twin pairs are locked together and co-located on specialized nodes to eliminate cross-talk.
 
-### 3. Universal Overlap Graph-Theoretic Array Topology
+### 3. Universal Overlap Acoustic Array Topology
 - **The Pitfall of Disjoint Partitioning ($R=1$):** Partitioning the 36-class vocabulary into disjoint subsets (13+13+12) boosts per-class capacity (+200%) but provides zero spatial redundancy: a single battery failure ($N-1$) crashes accuracy catastrophically ($-19.5\%$).
 - **Bounded Overlap Clustering ($R \ge 2$ with $R=3$ Anchors):** Enforces a strict minimum replication level of $R \ge 2$ across every single keyword, while top confusable Anchor cliques (`tree`/`three`) are replicated on all 3 nodes ($R=3$).
 - **Capacity & Redundancy Co-Optimization:** Reduces per-node vocabulary from 36 down to 25 classes (+44% parameter capacity per class) while guaranteeing robust $2/3$ majority consensus across every keyword.
@@ -112,12 +112,12 @@ w_i = \text{round}\left( \frac{15}{1 + e^{-(\text{SNR}_{\text{dB}} - 10.0) / 3.5
 \text{Fused Confidence} = \frac{\sum_{i \in \mathcal{A}} (\text{Confidence}_i \times w_i)}{\sum_{i \in \mathcal{A}} w_i}
 ```
 
-### 5. Multi-Stage False Alarm Defense & Graph-Theoretic Arbiter Veto
+### 5. Multi-Stage False Alarm Defense & Acoustic Arbiter Veto
 - **Dual-Tier Hardware & Gateway Squelch:**
   1. *Embedded C++ Squelch:* RMS energy bar (<5.0) skips neural execution during silence, 2-consecutive-frame temporal debounce (120 ms), and 150 ms refractory lockout prevent double-triggering.
   2. *Gateway Confidence Margin:* Rejects predictions where the Top-1 vs Top-2 probability margin is $< 15\%$.
   3. *Dynamic Room Noise Threshold:* Adapts consensus trigger bar to room acoustics: `T_dyn = min(72%, max(54%, 58% + 14 * Noise))`.
-  4. *Graph-Theoretic Arbiter Veto:* When a specialist node covering both words predicts word $A$ with $\ge 70\%$ confidence, it automatically vetoes any out-of-vocabulary proposal of word $B$ from sibling nodes that lack $A$ in their vocabulary.
+  4. *Acoustic Arbiter Veto:* When a specialist node covering both words predicts word $A$ with $\ge 70\%$ confidence, it automatically vetoes any out-of-vocabulary proposal of word $B$ from sibling nodes that lack $A$ in their vocabulary.
 
 ### 6. Fail-Stop Hardware Fault Tolerance & Battery Depletion Resilience
 - **Graceful Fail-Stop Degradation:** Under battery exhaustion or hardware failure ($N-1, N-2, N-3$), the gateway seamlessly switches consensus quorums.
@@ -202,7 +202,7 @@ streamable-kws/
 │       └── compat/                       # ESP-IDF to Zephyr RTOS compatibility layer
 ├── datasets.py                           # Google Speech Commands v2 streaming loader
 ├── train.py                              # PyTorch training script with Hydra & Cosine Annealing
-├── optimize_smart_overlap_allocation.py  # Graph-Theoretic Partition Optimizer (Tri-factor V(k) & W_ij)
+├── optimize_smart_overlap_allocation.py  # Acoustic Partition Optimizer (Tri-factor V(k) & W_ij)
 ├── quantize_to_espdl.py                  # ESP-PPQ INT8/FP32 Post-Training Quantizer
 └── multi_device_fusion.py                # Real-time BLE Gateway Concentrator & Late Fusion
 ```
@@ -226,7 +226,7 @@ python3 train.py --config-name=kws_smart_overlap_dev3_25classes.yaml
 
 ---
 
-### 2. Graph-Theoretic Vocabulary Optimizer
+### 2. Acoustic Vocabulary Partition Optimizer
 Derive optimal vocabulary partitions using the Tri-Factor Vulnerability Metric:
 ```bash
 # Generate 3-Node Universal Overlap partition (25+25+25 classes)
@@ -351,7 +351,7 @@ From our live physical hardware deployment, three distinct acoustic regimes gove
 | **1. Single Device Baseline** | 36 Classes | $R = 1$ | 1/1 (Standalone) | Standard edge setup running the full vocabulary on a single node. Vulnerable to room geometry, distance ($1/r^2$), and phonetic confusion. |
 | **2. 3x Homogeneous Array** | 3x 36 Classes | $R = 3$ (Uniform) | $\ge 2/3$ Nodes | 3 identical devices with identical weights. Suffers from the **Acoustic Correlation Trap**: identical weights mean identical decision boundary blind spots. |
 | **3. 0-Overlap Disjoint Partition** | 13 + 13 + 12 | $R = 1$ (Disjoint) | Specialist Top-1 | Vocabulary is partitioned into 3 disjoint sets with zero class overlap. Maximizes capacity (+200%), but collapses on node failure ($N-1$ battery loss drops accuracy by $-19.5\%$). |
-| **4. Graph-Coupled Partition** | 22 + 22 + 22 | $R \in [1, 3]$ | Specialist Voting | Connects confusable phonetic twins onto the same nodes ($W_{ij} \ge 0.05$), with $R=3$ for top anchor cliques (`tree`/`three`) and $R=1$ for non-confusable words. |
+| **4. Phonetic-Coupled Partition** | 22 + 22 + 22 | $R \in [1, 3]$ | Specialist Voting | Connects confusable phonetic twins onto the same nodes ($W_{ij} \ge 0.05$), with $R=3$ for top anchor clusters (`tree`/`three`) and $R=1$ for non-confusable words. |
 | **5. Universal Overlap Array** *(Recommended 3-Node)* | 25 + 25 + 25 | $R \ge 2$ ($R=3$ for Anchors) | $\ge 2/3$ Majority Quorum | **Gold Standard for 3 Nodes:** Every keyword is replicated on at least 2 nodes ($R \ge 2$), while top confusable twins (`tree`/`three`) are Anchors on all 3 nodes ($R=3$). Eliminates single points of failure. |
 | **6. 5-Device 2/5 Overlap Array** | 5x ~16 Classes | $R \in [2, 3]$ | $\ge 2/5$ Quorum | High specialization (~16 classes/node). Fast and lightweight, triggering on agreement of any 2 out of 5 nodes. |
 | **7. 5-Device 3/5 Majority Array** *(Ultimate Resilient)* | 5x ~23 Classes | $R \in [3, 5]$ | $\ge 3/5$ Strict Majority | **Maximum Fault Tolerance:** High overlapping vocabulary (~23 classes/node). When a node suffers battery loss ($N-1$), accuracy drops by **only $-1.3\%$** ($67.1\% \to 65.8\%$) under severe noise. |
@@ -367,7 +367,7 @@ From our live physical hardware deployment, three distinct acoustic regimes gove
 | **1. Single Device Baseline** | 36 Classes | 85.5% | 70.9% | 57.1% |
 | **2. 3x Homogeneous Array** | 3x 36 Classes | 87.5% | 73.9% | 59.3% |
 | **3. 0-Overlap Disjoint Partition** | 13 + 13 + 12 | 89.6% | 82.4% | 64.9% |
-| **4. Graph-Coupled Partition** | 22 + 22 + 22 | 92.6% | 86.3% | 66.8% |
+| **4. Phonetic-Coupled Partition** | 22 + 22 + 22 | 92.6% | 86.3% | 66.8% |
 | **5. Universal Overlap Array** | 25 + 25 + 25 | 92.2% | **88.1%** | **67.1%** |
 | **6. 5-Device 2/5 Overlap Array** | 5x ~16 Classes | 93.0% | 86.7% | 67.0% |
 | **7. 5-Device 3/5 Majority Array** | 5x ~23 Classes | **93.9%** | **88.1%** (+14.2%) | **67.1%** (+10.0%) |
