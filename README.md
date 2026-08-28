@@ -62,21 +62,10 @@ pip install -r requirements.txt
 
 ### ⚡ Step 2: Zephyr RTOS & Toolchain Setup (Firmware Development)
 
-The embedded C++ firmware runs on **Zephyr RTOS (v3.7+)**. For first-time setup, follow the official [Zephyr Getting Started Guide](https://docs.zephyrproject.org/latest/develop/getting_started/index.html) and [Seeed Studio XIAO ESP32S3 Board Documentation](https://docs.zephyrproject.org/latest/boards/seeed/xiao_esp32s3/doc/index.html).
-
-```bash
-# 1. Install West (Zephyr meta-tool) & dependencies
-pip install west
-
-# 2. Initialize and sync Zephyr RTOS workspace (v3.7+)
-west init ~/zephyrproject && cd ~/zephyrproject
-west update && west zephyr-export
-pip install -r zephyr/scripts/requirements.txt
-
-# 3. Clone ESP-DL (Vector SIMD acceleration library) into your workspace
-cd -  # Return to tinyml-distributed-kws-array workspace
-git clone https://github.com/espressif/esp-dl.git
-```
+The embedded C++ firmware runs on **Zephyr RTOS (v3.7+)**. To set up the Zephyr development environment, West meta-tool, and toolchain for the **Seeed Studio XIAO ESP32-S3 Sense**, refer to the official documentation:
+- 📖 [Zephyr RTOS Getting Started Guide](https://docs.zephyrproject.org/latest/develop/getting_started/index.html)
+- 🔌 [Seeed Studio XIAO ESP32S3 Zephyr Board Documentation](https://docs.zephyrproject.org/latest/boards/seeed/xiao_esp32s3/doc/index.html)
+- 🧠 [Espressif ESP-DL Repository](https://github.com/espressif/esp-dl) *(Vector SIMD acceleration library)*
 
 ---
 
