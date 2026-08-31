@@ -216,14 +216,22 @@ streamable-kws/
 ├── train.py                              # PyTorch training script with Hydra & Cosine Annealing
 ├── optimize_smart_overlap_allocation.py  # Acoustic Partition Optimizer (Tri-factor V(k) & W_ij)
 ├── quantize_to_espdl.py                  # ESP-PPQ INT8/FP32 Post-Training Quantizer
-└── multi_device_fusion.py                # Real-time BLE Gateway Concentrator & Late Fusion
+├── multi_device_fusion.py                # Real-time BLE Gateway Concentrator & Late Fusion
+└── logs/                                 # Pre-trained checkpoints for 3-Device Universal Overlap
+    ├── kws_smart_overlap_dev1_25classes/ # Node 1 pre-trained PyTorch weights (.pth) & configs
+    ├── kws_smart_overlap_dev2_25classes/ # Node 2 pre-trained PyTorch weights (.pth) & configs
+    └── kws_smart_overlap_dev3_25classes/ # Node 3 pre-trained PyTorch weights (.pth) & configs
 ```
 
 ---
 
 ## 🛠️ End-to-End Pipeline & Deployment Guide
 
-### 1. Model Training
+> [!TIP]
+> **Pre-Trained Weights Included:**  
+> Pre-trained PyTorch models for all 3 Universal Overlap nodes are already included in `logs/kws_smart_overlap_dev[1-3]_25classes/`. You can **skip Step 1 (Training)** and jump directly to **Step 3 (INT8 Quantization)**!
+
+### 1. Model Training (Optional)
 Train individual partition device models or the 36-class baseline:
 ```bash
 # Train Node 1 (25 classes)
@@ -252,7 +260,7 @@ python3 optimize_smart_overlap_allocation.py --nodes 5
 
 ### 3. Device-Wise INT8 Quantization Export (Dev 1, Dev 2, Dev 3)
 
-Quantize each device's trained PyTorch model into calibrated INT8 `.espdl` binaries:
+Quantize each device's pre-trained PyTorch model into calibrated INT8 `.espdl` binaries:
 
 ```bash
 # 1. Quantize Node 1 (25 classes)
